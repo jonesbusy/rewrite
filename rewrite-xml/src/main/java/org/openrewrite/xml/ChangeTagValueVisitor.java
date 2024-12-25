@@ -16,19 +16,28 @@
 package org.openrewrite.xml;
 
 import org.openrewrite.marker.Markers;
+import org.openrewrite.xml.tree.Content;
 import org.openrewrite.xml.tree.Xml;
 
-import static java.util.Collections.singletonList;
+import java.util.LinkedList;
+import java.util.List;
+
 import static org.openrewrite.Tree.randomId;
 
 public class ChangeTagValueVisitor<P> extends XmlVisitor<P> {
 
     private final Xml.Tag scope;
     private final String value;
+    private final String comment;
 
     public ChangeTagValueVisitor(Xml.Tag scope, String value) {
+        this(scope, value, null);
+    }
+
+    public ChangeTagValueVisitor(Xml.Tag scope, String value, String comment) {
         this.scope = scope;
         this.value = value;
+        this.comment = comment;
     }
 
     @Override
@@ -48,10 +57,34 @@ public class ChangeTagValueVisitor<P> extends XmlVisitor<P> {
                 prefix = existingValue.getPrefix();
                 afterText = existingValue.getAfterText();
             }
-            t = t.withContent(singletonList(new Xml.CharData(randomId(),
-                    prefix, Markers.EMPTY, false, value, afterText)));
+            List<Content> content = new LinkedList<>();
+            if (comment != null && !comment.isEmpty()) {
+                doAfterVisit(new AddCommentVisitor<>(prefix, t, comment));
+            }
+            content.add(new Xml.CharData(randomId(), prefix, Markers.EMPTY, false, value, afterText));
+            t = t.withContent(content);
         }
 
         return t;
     }
+
+    private static class AddCommentVisitor<P> extends XmlVisitor<P> {
+        private final String prefix;
+        private final Xml.Tag target;
+        private final String comment;
+
+        public AddCommentVisitor(String prefix, Xml.Tag target, String comment) {
+            this.prefix = prefix;
+            this.target = target;
+            this.comment = comment;
+        }
+
+        @Override
+        public Xml visitTag(Xml.Tag tag, P p) {
+            List<Content> content = new LinkedList<>(tag.getContent());
+            content.add(new Xml.Comment(randomId(), prefix, Markers.EMPTY, comment));
+            return tag.withContent(content);
+        }
+    }
+
 }
